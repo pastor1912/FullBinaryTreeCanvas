@@ -5,11 +5,11 @@ interface Point {
 
 interface GNode {
   id: number;
-  left?: GNode;
-  right?: GNode;
+  type?: "isAvailable" | "isLoading";
   x: number;
   y: number;
   minimized: boolean;
+  isRoot?: boolean;
 }
 
 class BinaryTree {
@@ -17,54 +17,89 @@ class BinaryTree {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private nodeRadius = 20;
-  private levelGap = 60;
+  private levelTree: number = 0;
+  private levelGap = 90;
   private verticalGap = 60;
   private scale = 1;
   private translate: Point = { x: 0, y: 0 };
+  child: { [index: GNode["id"]]: GNode };
 
   constructor(
     private centerX: number,
     private centerY: number,
+    private me: GNode["id"],
     canvas: HTMLCanvasElement
   ) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d")!;
+    this.ctx = canvas.getContext("2d");
+    this.centerX = centerX;
+    this.centerY = centerY;
   }
 
-  addNode(id: number): void {
+  addNode(id: number, type?: "isAvailable" | "isLoading"): void {
     const newNode: GNode = {
       id,
+      type,
       x: this.centerX,
       y: this.centerY,
       minimized: false,
+      isRoot: false,
     };
 
     if (!this.root) {
-      this.root = newNode;
+      this.root = { ...newNode, isRoot: true };
+      this.child = {};
+      this.addNode(2 * id + 1);
+      this.addNode(2 * id + 2);
       return;
     }
 
-    let current = this.root;
-    let parent: GNode;
-
-    while (current) {
-      parent = current;
-
-      if (id < current.id) {
-        current = current.left;
-        if (!current) {
-          parent.left = newNode;
-          this.updateTreeLayout();
-          return;
-        }
-      } else {
-        current = current.right;
-        if (!current) {
-          parent.right = newNode;
-          this.updateTreeLayout();
-          return;
-        }
+    const parentId = BinaryTree.parentNodeId(id);
+    let isParent = !!this.child[parentId];
+    if (!isParent) {
+      if (this.root.id === parentId) {
+        isParent = true;
       }
+    }
+
+    if (!isParent) {
+      return;
+    }
+    const current = this.child[id];
+    if (!current) {
+      this.child[id] = newNode;
+      this.levelTree =
+        this.nodeLevel(id) < this.levelTree
+          ? this.levelTree
+          : this.nodeLevel(id);
+      this.updateTreeLayout();
+      return;
+    } else {
+      current.type = type;
+    }
+  }
+
+  nodeParent(id: number): GNode | undefined {
+    const nodeLeftid = 2 * id + 1;
+    return this.child[nodeLeftid];
+  }
+  nodeLevel(id: number): number {
+    return Math.floor(Math.log2(id + 1)) + 1;
+  }
+
+  nodeRight(id: number): GNode | undefined {
+    const nodeId = 2 * id + 2;
+    return this.child[nodeId];
+  }
+  nodeLeft(id: number): GNode | undefined {
+    const nodeId = 2 * id + 1;
+    return this.child[nodeId];
+  }
+  static parentNodeId(id: number) {
+    if (BinaryTree.isNodeRight(id)) {
+      return (id - 2) / 2;
+    } else {
+      return (id - 1) / 2;
     }
   }
 
@@ -73,36 +108,93 @@ class BinaryTree {
       return;
     }
 
-    const calcNodePositions = (node: GNode, x: number, y: number): void => {
+    const calcNodePositions = (
+      node: GNode,
+      x: number,
+      y: number,
+      level: number,
+      maxDepth: number,
+      maxNodes: number
+    ): void => {
       if (node.minimized) {
         return;
       }
+      //   console.log("d", node, x, y, level);
 
       node.x = x;
       node.y = y;
 
-      if (node.left) {
-        const leftX = x - this.levelGap / Math.pow(2, this.scale);
-        const leftY = y + this.verticalGap;
-        calcNodePositions(node.left, leftX, leftY);
+      const nodeLeft = this.nodeLeft(node.id);
+      if (nodeLeft) {
+        console.log("maxNodesmaxNodes", maxNodes);
+        const leftX = x - maxNodes * this.nodeRadius;
+        const leftY = y + this.nodeRadius + (maxDepth * this.nodeRadius) / 4;
+        calcNodePositions(
+          nodeLeft,
+          leftX,
+          leftY,
+          level + 1,
+          maxDepth - 1,
+          maxNodes / 2
+        );
       }
 
-      if (node.right) {
-        const rightX = x + this.levelGap / Math.pow(2, this.scale);
-        const rightY = y + this.verticalGap;
-        calcNodePositions(node.right, rightX, rightY);
+      const nodeRight = this.nodeRight(node.id);
+      if (nodeRight) {
+        const rightX = x + maxNodes * this.nodeRadius;
+        const rightY = y + this.nodeRadius + (maxDepth * this.nodeRadius) / 4;
+        calcNodePositions(
+          nodeRight,
+          rightX,
+          rightY,
+          level + 1,
+          maxDepth - 1,
+          maxNodes / 2
+        );
       }
     };
 
-    calcNodePositions(this.root, this.centerX, this.centerY);
+    calcNodePositions(
+      this.root,
+      this.centerX,
+      this.centerY,
+      1,
+      this.levelTree,
+      Math.pow(2, this.levelTree + 1) / 2
+    );
   }
 
+  draw(): void {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.drawTree();
+  }
+  drawTree(
+    node = this.root,
+    startX = this.centerX,
+    startY = this.centerY
+  ): void {
+    if (!node) {
+      return;
+    }
+    this.drawNode(node);
+    const nodeLeft = this.nodeLeft(node.id);
+    if (nodeLeft) {
+      this.drawLine(startX, startY, nodeLeft.x, nodeLeft.y);
+      this.drawTree(nodeLeft, nodeLeft.x, nodeLeft.y);
+    }
+
+    const nodeRight = this.nodeRight(node.id);
+    if (nodeRight) {
+      this.drawLine(startX, startY, nodeRight.x, nodeRight.y);
+      this.drawTree(nodeRight, nodeRight.x, nodeRight.y);
+    }
+  }
   drawNode(node: GNode): void {
     const isMinimized = node.minimized;
     const { x, y } = node;
     this.ctx.beginPath();
     this.ctx.arc(x, y, this.nodeRadius, 0, Math.PI * 2);
-    this.ctx.fillStyle = isMinimized ? "gray" : "white";
+    this.ctx.fillStyle = isMinimized ? "gray" : "#FFCA28";
     this.ctx.fill();
     this.ctx.lineWidth = 2;
     this.ctx.strokeStyle = "black";
@@ -128,30 +220,17 @@ class BinaryTree {
     this.ctx.closePath();
   }
 
-  drawTree(node?: GNode, startX = this.centerX, startY = this.centerY): void {
-    if (!node) {
-      return;
-    }
-    this.drawNode(node);
-
-    if (node.left) {
-      this.drawLine(startX, startY, node.left.x, node.left.y);
-      this.drawTree(node.left, node.left.x, node.left.y);
-    }
-
-    if (node.right) {
-      this.drawLine(startX, startY, node.right.x, node.right.y);
-      this.drawTree(node.right, node.right.x, node.right.y);
-    }
-  }
   findNode(event: MouseEvent): GNode | undefined {
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left - this.translate.x;
     const y = event.clientY - rect.top - this.translate.y;
+
     const searchNode = (node: GNode | undefined): GNode | undefined => {
       if (!node) {
         return undefined;
       }
+      const nodeLeft = this.nodeLeft(node.id);
+      const nodeRight = this.nodeRight(node.id);
 
       const dx = node.x - x;
       const dy = node.y - y;
@@ -161,12 +240,12 @@ class BinaryTree {
         return node;
       }
 
-      if (x < node.x && node.left) {
-        return searchNode(node.left);
+      if (x < node.x && nodeLeft) {
+        return searchNode(nodeLeft);
       }
 
-      if (x > node.x && node.right) {
-        return searchNode(node.right);
+      if (x > node.x && nodeRight) {
+        return searchNode(nodeRight);
       }
 
       return undefined;
@@ -182,12 +261,14 @@ class BinaryTree {
   }
 
   zoomIn(): void {
+    console.log("zoomIn");
     this.scale++;
     this.updateTreeLayout();
     this.draw();
   }
 
   zoomOut(): void {
+    console.log("zoomOut");
     if (this.scale === 1) {
       return;
     }
@@ -201,12 +282,7 @@ class BinaryTree {
     this.draw();
   }
 
-  draw(): void {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.drawTree();
-  }
-
-  init(): void {
+  init(onClickNode: (node: GNode) => void): void {
     this.updateTreeLayout();
     this.draw();
 
@@ -214,7 +290,8 @@ class BinaryTree {
       const node = this.findNode(event);
 
       if (node) {
-        this.toggleMinimize(node);
+        onClickNode(node);
+        // this.toggleMinimize(node);
       } else {
         let startX = event.clientX - this.translate.x;
         let startY = event.clientY - this.translate.y;
@@ -243,14 +320,8 @@ class BinaryTree {
       zoomIn ? this.zoomIn() : this.zoomOut();
     });
   }
+
+  static isNodeRight(id: number) {
+    return id % 2 === 0;
+  }
 }
-
-const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-canvas.width = window.innerWidth - 20;
-canvas.height = window.innerHeight - 20;
-const centerX = canvas.width / 2;
-const centerY = 50;
-
-const binaryTree = new BinaryTree(centerX, centerY, canvas);
-binaryTree.addNode(4);
-binaryTree.init();

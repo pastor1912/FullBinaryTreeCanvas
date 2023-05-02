@@ -17,5 +17,63 @@
     <button id="zoom-in">zoom-in</button>
     <button id="zoom-out">zoom-out</button>
     <script src="./index.js"></script>
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = window.innerHeight - 100;
+      canvas.height = window.innerHeight - 100;
+      const centerX = canvas.height / 2;
+      const centerY = canvas.height / 2;
+
+      //   ctx.beginPath();
+      //   ctx.arc(centerX, centerY, nodeRadius, 0, Math.PI * 2);
+      //   ctx.fillStyle = isMinimized ? "gray" : "white";
+      //   ctx.fill();
+      //   ctx.lineWidth = 2;
+      //   ctx.strokeStyle = "black";
+      //   ctx.stroke();
+      //   ctx.closePath();
+
+      const tree = new BinaryTree(centerX, centerX, 0, canvas);
+      console.log("tree", tree);
+      tree.addNode(0);
+
+      //   let number = 1;
+      //   while (number < 2) {
+      //     // setTimeout(function () {
+      //     number++;
+      //     tree.addNode(number);
+      //     // }, 1000);
+      //   }
+      //   tree.addNode(25);
+
+      tree.init(function (node) {
+        console.log("node click with id", node.id);
+      });
+
+      canvas.addEventListener("wheel", (event) => {
+        if (event.deltaY < 0) {
+          tree.zoomIn();
+        } else {
+          tree.zoomOut();
+        }
+      });
+
+      document.getElementById("add-node").addEventListener("click", () => {
+        const input = document.getElementById("node-id");
+        const id = parseInt(input.value);
+        tree.addNode(id);
+        tree.draw();
+        input.value = "";
+      });
+
+      //   document.getElementById("zoom-in").addEventListener("click", () => {
+      //     tree.zoomIn();
+      //   });
+
+      //   document.getElementById("zoom-out").addEventListener("click", () => {
+      //     tree.zoomOut();
+      //   });
+    </script>
   </body>
 </html>
